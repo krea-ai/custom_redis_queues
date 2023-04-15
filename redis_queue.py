@@ -65,7 +65,7 @@ class Queue:
     def peek_jobs(self, start=0, end=-1):
         serialized_jobs = self.redis_client.lrange(self.queue_name, start, end)
         jobs = [json.loads(serialized_job) for serialized_job in serialized_jobs]
-        return jobs
+        return jobs[::-1]
 
 # def example_job_handler(job):
 #     print(f"Processing job: {job}")
