@@ -10,9 +10,9 @@ dotenv.load_dotenv()
 REDIS_URL = os.getenv("REDIS_URL")
 class Queue:
     def __init__(
-        self, queue_name, redis_url, status_name="job_status", result_name="job_result"
+        self, queue_name, redis_url, status_name="job_status", result_name="job_result", password=os.getenv("REDIS_PASSWORD", None)
     ):
-        self.redis_client = redis.Redis.from_url(redis_url)
+        self.redis_client = redis.Redis.from_url(redis_url, password=password)
         self.queue_name = queue_name
         self.status_name = status_name
         self.result_name = result_name
@@ -65,7 +65,7 @@ class Queue:
     def peek_jobs(self, start=0, end=-1):
         serialized_jobs = self.redis_client.lrange(self.queue_name, start, end)
         jobs = [json.loads(serialized_job) for serialized_job in serialized_jobs]
-        return jobs
+        return jobs[::-1]
     def remove_job(self, job_id):
         serialized_jobs = self.redis_client.lrange(self.queue_name, 0, -1)
         for serialized_job in serialized_jobs:
@@ -76,7 +76,7 @@ class Queue:
                 return True
         print(f"Job {job_id} not found in the queue")
         return False
-
+        
 # def example_job_handler(job):
 #     print(f"Processing job: {job}")
 #     time.sleep(1)
