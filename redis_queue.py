@@ -66,6 +66,16 @@ class Queue:
         serialized_jobs = self.redis_client.lrange(self.queue_name, start, end)
         jobs = [json.loads(serialized_job) for serialized_job in serialized_jobs]
         return jobs
+    def remove_job(self, job_id):
+        serialized_jobs = self.redis_client.lrange(self.queue_name, 0, -1)
+        for serialized_job in serialized_jobs:
+            job = json.loads(serialized_job)
+            if job['id'] == job_id:
+                self.redis_client.lrem(self.queue_name, 0, serialized_job)
+                print(f"Removed job {job_id} from the queue")
+                return True
+        print(f"Job {job_id} not found in the queue")
+        return False
 
 # def example_job_handler(job):
 #     print(f"Processing job: {job}")
