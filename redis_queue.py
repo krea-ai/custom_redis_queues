@@ -18,7 +18,7 @@ class Queue:
         self.result_name = result_name
 
     def enqueue(self, job):
-        job_id = str(uuid.uuid4())
+        job_id = str(uuid.uuid4())[:8]
         job["id"] = job_id
         serialized_job = json.dumps(job)
         self.redis_client.lpush(self.queue_name, serialized_job)
