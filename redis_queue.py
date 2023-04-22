@@ -1,4 +1,5 @@
 import redis
+import pprint
 import time
 import json
 import uuid
@@ -17,19 +18,37 @@ class Queue:
         self.status_name = status_name
         self.result_name = result_name
 
-    def enqueue(self, job):
-        job_id = str(uuid.uuid4())[:8]
-        job["id"] = job_id
+    def enqueue(self, job, ttl=None):
         serialized_job = json.dumps(job)
-        self.redis_client.lpush(self.queue_name, serialized_job)
-        self.redis_client.hset(self.status_name, job_id, "queued")
-        return job_id
+        job_key = f"{self.queue_name}:job:{job['id']}"
+        self.redis_client.set(job_key, serialized_job)
+        if ttl is not None:
+            self.redis_client.expire(job_key, ttl)
+        self.redis_client.rpush(self.queue_name, job_key)
+        self.redis_client.hset(self.status_name, job['id'], 'queued')
 
     def dequeue(self):
-        _, serialized_job = self.redis_client.brpop(self.queue_name)
+        _, job_key = self.redis_client.brpop(self.queue_name)
+        serialized_job = self.redis_client.get(job_key)
+        
+        if serialized_job is None:
+            print("job with key {} expired".format(job_key))
+            self.redis_client.lrem(self.queue_name, 0, job_key)
+            return None
+        
         job = json.loads(serialized_job)
-        self.redis_client.hset(self.status_name, job["id"], "processing")
-        return job
+        job_status = self.redis_client.hget(self.status_name, job['id'])
+
+        if job_status != b'cancelled':
+            self.redis_client.hset(self.status_name, job['id'], 'processing')
+            return job
+
+        # Job marked for removal, so we just skip it
+        print("job with key {} was cancelled".format(job_key))
+        self.redis_client.hdel(self.status_name, job['id'])
+        self.redis_client.lrem(self.queue_name, 0, job_key)
+        return None
+
 
     def set_failed(self, job_id):
         self.redis_client.hset(self.status_name, job_id, "failed")
@@ -73,6 +92,7 @@ class Queue:
             if job['id'] == job_id:
                 self.redis_client.lrem(self.queue_name, 0, serialized_job)
                 print(f"Removed job {job_id} from the queue")
+                print("serialized_job", pprint.pformat(serialized_job))
                 return True
         print(f"Job {job_id} not found in the queue")
         return False
