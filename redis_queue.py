@@ -19,13 +19,16 @@ class Queue:
         self.result_name = result_name
 
     def enqueue(self, job, ttl=None):
+        job_id = str(uuid.uuid4())[:8]
+        job["id"] = job_id
         serialized_job = json.dumps(job)
         job_key = f"{self.queue_name}:job:{job['id']}"
         self.redis_client.set(job_key, serialized_job)
         if ttl is not None:
             self.redis_client.expire(job_key, ttl)
-        self.redis_client.rpush(self.queue_name, job_key)
+        self.redis_client.lpush(self.queue_name, job_key)
         self.redis_client.hset(self.status_name, job['id'], 'queued')
+        return job_id
 
     def dequeue(self):
         _, job_key = self.redis_client.brpop(self.queue_name)
@@ -86,16 +89,17 @@ class Queue:
         jobs = [json.loads(serialized_job) for serialized_job in serialized_jobs]
         return jobs[::-1]
     def remove_job(self, job_id):
-        serialized_jobs = self.redis_client.lrange(self.queue_name, 0, -1)
-        for serialized_job in serialized_jobs:
-            job = json.loads(serialized_job)
-            if job['id'] == job_id:
-                self.redis_client.lrem(self.queue_name, 0, serialized_job)
-                print(f"Removed job {job_id} from the queue")
-                print("serialized_job", pprint.pformat(serialized_job))
-                return True
-        print(f"Job {job_id} not found in the queue")
-        return False
+        self.redis_client.hset(self.status_name, job_id, 'cancel')
+        # serialized_jobs = self.redis_client.lrange(self.queue_name, 0, -1)
+        # for serialized_job in serialized_jobs:
+        #     job = json.loads(serialized_job)
+        #     if job['id'] == job_id:
+        #         self.redis_client.lrem(self.queue_name, 0, serialized_job)
+        #         print(f"Removed job {job_id} from the queue")
+        #         print("serialized_job", pprint.pformat(serialized_job))
+        #         return True
+        # print(f"Job {job_id} not found in the queue")
+        # return False
         
 # def example_job_handler(job):
 #     print(f"Processing job: {job}")
