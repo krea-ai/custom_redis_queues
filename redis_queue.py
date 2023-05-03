@@ -1,13 +1,31 @@
 import redis
 import time
+import datetime
 import json
 import uuid
 import os
 import dotenv
+import functools
 
 dotenv.load_dotenv()
 
 REDIS_URL = os.getenv("REDIS_URL")
+
+def try_except_decorator(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(f"Exception occurred in {func.__name__}: {e}")
+            # You can also choose to return a default value or re-raise the exception if needed
+    return wrapper
+
+def log_timestamp(msg, *args):
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    print(current_time, msg, *args) 
+
 class Queue:
     def __init__(
         self, queue_name, redis_url, status_name="job_status", result_name="job_result", password=os.getenv("REDIS_PASSWORD", None)
@@ -17,6 +35,7 @@ class Queue:
         self.status_name = status_name
         self.result_name = result_name
 
+    @try_except_decorator
     def enqueue(self, job):
         job_id = str(uuid.uuid4())[:8]
         job["id"] = job_id
@@ -25,18 +44,22 @@ class Queue:
         self.redis_client.hset(self.status_name, job_id, "queued")
         return job_id
 
+    @try_except_decorator
     def dequeue(self):
         _, serialized_job = self.redis_client.brpop(self.queue_name)
         job = json.loads(serialized_job)
         self.redis_client.hset(self.status_name, job["id"], "processing")
         return job
 
+    @try_except_decorator
     def set_failed(self, job_id):
         self.redis_client.hset(self.status_name, job_id, "failed")
 
+    @try_except_decorator
     def get_status(self, job_id):
         return self.redis_client.hget(self.status_name, job_id).decode()
 
+    @try_except_decorator
     def get_result(self, job_id):
         serialized_result = self.redis_client.hget(self.result_name, job_id)
         if not serialized_result:
@@ -45,27 +68,35 @@ class Queue:
             return None
         return json.loads(serialized_result)
 
+    @try_except_decorator
     def is_empty(self):
         return self.redis_client.llen(self.queue_name) == 0
 
+    @try_except_decorator
     def complete(self, job_id, result):
         serialized_result = json.dumps(result)
         self.redis_client.hset(self.result_name, job_id, serialized_result)
         self.redis_client.hset(self.status_name, job_id, "completed")
 
+    @try_except_decorator
     def is_empty(self):
         return self.redis_client.llen(self.queue_name) == 0
 
+    @try_except_decorator
     def length(self):
         return self.redis_client.llen(self.queue_name)
 
+    @try_except_decorator
     def delete(self):
         self.redis_client.delete(self.queue_name)
 
+    @try_except_decorator
     def peek_jobs(self, start=0, end=-1):
         serialized_jobs = self.redis_client.lrange(self.queue_name, start, end)
         jobs = [json.loads(serialized_job) for serialized_job in serialized_jobs]
         return jobs[::-1]
+
+    @try_except_decorator
     def remove_job(self, job_id):
         serialized_jobs = self.redis_client.lrange(self.queue_name, 0, -1)
         for serialized_job in serialized_jobs:
