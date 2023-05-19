@@ -35,7 +35,7 @@ class Queue:
         self, queue_name, redis_url, status_name="job_status", result_name="job_result", password=os.getenv("REDIS_PASSWORD", None)
     ):
         self.redis_client = redis.Redis.from_url(redis_url, password=password)
-        self.queue_name = queue_name
+        self.name = queue_name
         self.status_name = status_name
         self.result_name = result_name
 
@@ -44,13 +44,13 @@ class Queue:
         job_id = str(uuid.uuid4())[:8]
         job["id"] = job_id
         serialized_job = json.dumps(job)
-        self.redis_client.lpush(self.queue_name, serialized_job)
+        self.redis_client.lpush(self.name, serialized_job)
         self.redis_client.hset(self.status_name, job_id, "queued")
         return job_id
 
     @try_except_decorator
     def dequeue(self):
-        _, serialized_job = self.redis_client.brpop(self.queue_name)
+        _, serialized_job = self.redis_client.brpop(self.name)
         job = json.loads(serialized_job)
         self.redis_client.hset(self.status_name, job["id"], "processing")
         return job
@@ -74,7 +74,7 @@ class Queue:
 
     @try_except_decorator
     def is_empty(self):
-        return self.redis_client.llen(self.queue_name) == 0
+        return self.redis_client.llen(self.name) == 0
 
     @try_except_decorator
     def complete(self, job_id, result):
@@ -84,29 +84,29 @@ class Queue:
 
     @try_except_decorator
     def is_empty(self):
-        return self.redis_client.llen(self.queue_name) == 0
+        return self.redis_client.llen(self.name) == 0
 
     @try_except_decorator
     def length(self):
-        return self.redis_client.llen(self.queue_name)
+        return self.redis_client.llen(self.name)
 
     @try_except_decorator
     def delete(self):
-        self.redis_client.delete(self.queue_name)
+        self.redis_client.delete(self.name)
 
     @try_except_decorator
     def peek_jobs(self, start=0, end=-1):
-        serialized_jobs = self.redis_client.lrange(self.queue_name, start, end)
+        serialized_jobs = self.redis_client.lrange(self.name, start, end)
         jobs = [json.loads(serialized_job) for serialized_job in serialized_jobs]
         return jobs[::-1]
 
     @try_except_decorator
     def remove_job(self, job_id):
-        serialized_jobs = self.redis_client.lrange(self.queue_name, 0, -1)
+        serialized_jobs = self.redis_client.lrange(self.name, 0, -1)
         for serialized_job in serialized_jobs:
             job = json.loads(serialized_job)
             if job['id'] == job_id:
-                self.redis_client.lrem(self.queue_name, 0, serialized_job)
+                self.redis_client.lrem(self.name, 0, serialized_job)
                 print(f"Removed job {job_id} from the queue")
                 return True
         print(f"Job {job_id} not found in the queue")
