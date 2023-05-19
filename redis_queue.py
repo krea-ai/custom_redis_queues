@@ -6,8 +6,10 @@ import uuid
 import os
 import dotenv
 import functools
+from alerting import send_telegram_notification
 
 dotenv.load_dotenv()
+import traceback
 
 REDIS_URL = os.getenv("REDIS_URL")
 
@@ -17,7 +19,9 @@ def try_except_decorator(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
+            traceback.print_exc()
             print(f"Exception occurred in {func.__name__}: {e}")
+            send_telegram_notification(f"REDIS ERROR in func: {func.__name__}: {traceback.format_exc()}")
             # You can also choose to return a default value or re-raise the exception if needed
     return wrapper
 
