@@ -1,11 +1,13 @@
-import redis
-import time
 import datetime
-import json
-import uuid
-import os
-import dotenv
 import functools
+import json
+import os
+import time
+import uuid
+
+import dotenv
+import redis
+
 from alerting import send_telegram_notification
 
 dotenv.load_dotenv()
@@ -38,6 +40,7 @@ class Queue:
         self.name = queue_name
         self.status_name = status_name
         self.result_name = result_name
+        self.last_len = 0
 
     @try_except_decorator
     def enqueue(self, job):
@@ -88,7 +91,11 @@ class Queue:
 
     @try_except_decorator
     def length(self):
-        return self.redis_client.llen(self.name)
+        try:
+            self.last_len = self.redis_client.llen(self.name)
+        except:
+            pass 
+        return self.last_len
 
     @try_except_decorator
     def delete(self):
