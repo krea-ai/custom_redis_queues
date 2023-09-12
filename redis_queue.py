@@ -34,9 +34,15 @@ def log_timestamp(msg, *args):
 
 class Queue:
     def __init__(
-        self, queue_name, redis_url, status_name="job_status", result_name="job_result", password=os.getenv("REDIS_PASSWORD", None)
+        self, queue_name, redis_client=None, redis_url=None, status_name="job_status", result_name="job_result", password=os.getenv("REDIS_PASSWORD", None)
     ):
-        self.redis_client = redis.Redis.from_url(redis_url, password=password)
+        if not (redis_client or redis_url):
+            raise ValueError("Either redis_client or redis_url must be provided")
+        if redis_client is None:
+            print("WARNING: inefficient redis queue usage, redis client should be reused")
+            self.redis_client = redis.Redis.from_url(redis_url, password=password)
+        else:
+            self.redis_client = redis_client
         self.name = queue_name
         self.status_name = status_name
         self.result_name = result_name
