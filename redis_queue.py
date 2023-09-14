@@ -18,13 +18,17 @@ REDIS_URL = os.getenv("REDIS_URL")
 def try_except_decorator(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            traceback.print_exc()
-            print(f"Exception occurred in {func.__name__}: {e}")
-            send_telegram_notification(f"REDIS ERROR in func: {func.__name__}: {traceback.format_exc()}")
-            # You can also choose to return a default value or re-raise the exception if needed
+        for i in range(4): 
+            try:
+                x = func(*args, **kwargs)
+                return x
+            except Exception as e:
+                print("caught redis exception, retrying")
+                if i > 2:
+                    traceback.print_exc()
+                    print(f"Exception occurred in {func.__name__}")
+                    send_telegram_notification(f"REDIS ERROR in func: {func.__name__}: {traceback.format_exc()}")
+
     return wrapper
 
 def log_timestamp(msg, *args):
