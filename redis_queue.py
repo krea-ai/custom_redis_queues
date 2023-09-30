@@ -23,7 +23,7 @@ def try_except_decorator(func):
                 x = func(*args, **kwargs)
                 return x
             except Exception as e:
-                print("caught redis exception, retrying")
+                print(f"caught redis exception {e}, retrying")
                 if i > 2:
                     traceback.print_exc()
                     print(f"Exception occurred in {func.__name__}")
@@ -63,7 +63,10 @@ class Queue:
 
     @try_except_decorator
     def dequeue(self):
-        _, serialized_job = self.redis_client.brpop(self.name)
+        result = self.redis_client.brpop(self.name, timeout=2.5)
+        if result is None:
+            return None
+        _, serialized_job = result
         job = json.loads(serialized_job)
         self.redis_client.hset(self.status_name, job["id"], "processing")
         return job
