@@ -18,17 +18,13 @@ REDIS_URL = os.getenv("REDIS_URL")
 def try_except_decorator(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        for i in range(4): 
-            try:
-                x = func(*args, **kwargs)
-                return x
-            except Exception as e:
-                print(f"caught redis exception {e}, retrying")
-                if i > 2:
-                    traceback.print_exc()
-                    print(f"Exception occurred in {func.__name__}")
-                    send_telegram_notification(f"REDIS ERROR in func: {func.__name__}: {traceback.format_exc()}")
-
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            traceback.print_exc()
+            print(f"Exception occurred in {func.__name__}: {e}")
+            send_telegram_notification(f"REDIS ERROR in func: {func.__name__}: {traceback.format_exc()}")
+            # You can also choose to return a default value or re-raise the exception if needed
     return wrapper
 
 def log_timestamp(msg, *args):
@@ -57,18 +53,20 @@ class Queue:
         job_id = str(uuid.uuid4())[:8]
         job["id"] = job_id
         serialized_job = json.dumps(job)
-        self.redis_client.lpush(self.name, serialized_job)
+        self.redis_client.lpush(self.name, job_id)  # push job id instead of serialized job
+        self.redis_client.hset(f'{self.name}_jobs', job_id, serialized_job)  # new hash to map job ids to serialized jobs
         self.redis_client.hset(self.status_name, job_id, "queued")
         return job_id
 
     @try_except_decorator
     def dequeue(self):
-        result = self.redis_client.brpop(self.name, timeout=2.5)
-        if result is None:
+        _, job_id = self.redis_client.brpop(self.name)
+        serialized_job = self.redis_client.hget(f'{self.name}_jobs', job_id)
+        if serialized_job is None:
+            print(f"Job {job_id} not found in jobs hash")
             return None
-        _, serialized_job = result
         job = json.loads(serialized_job)
-        self.redis_client.hset(self.status_name, job["id"], "processing")
+        self.redis_client.hset(self.status_name, job_id, "processing")
         return job
 
     @try_except_decorator
@@ -83,7 +81,7 @@ class Queue:
     def get_result(self, job_id):
         serialized_result = self.redis_client.hget(self.result_name, job_id)
         if not serialized_result:
-            print("failed")
+            print("failed to get result")
             self.set_failed(job_id)
             return None
         return json.loads(serialized_result)
@@ -113,6 +111,10 @@ class Queue:
     @try_except_decorator
     def delete(self):
         self.redis_client.delete(self.name)
+        self.redis_client.delete(f'{self.name}_jobs')
+        self.redis_client.delete(self.status_name)
+        self.redis_client.delete(self.result_name)
+
 
     @try_except_decorator
     def peek_jobs(self, start=0, end=-1):
@@ -122,13 +124,12 @@ class Queue:
 
     @try_except_decorator
     def remove_job(self, job_id):
-        serialized_jobs = self.redis_client.lrange(self.name, 0, -1)
-        for serialized_job in serialized_jobs:
-            job = json.loads(serialized_job)
-            if job['id'] == job_id:
-                self.redis_client.lrem(self.name, 0, serialized_job)
-                print(f"Removed job {job_id} from the queue")
-                return True
+        serialized_job = self.redis_client.hget(f'{self.name}_jobs', job_id)
+        if serialized_job:
+            self.redis_client.lrem(self.name, 0, job_id)  # remove job id from queue
+            self.redis_client.hdel(f'{self.name}_jobs', job_id)  # remove job from jobs hash
+            print(f"Removed job {job_id} from the queue")
+            return True
         print(f"Job {job_id} not found in the queue")
         return False
         
