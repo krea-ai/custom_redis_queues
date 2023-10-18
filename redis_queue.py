@@ -8,7 +8,10 @@ import uuid
 import dotenv
 import redis
 
-from alerting import send_telegram_notification
+try:
+    from alerting import send_telegram_notification
+except:
+    from .alerting import send_telegram_notification
 
 dotenv.load_dotenv()
 import traceback
