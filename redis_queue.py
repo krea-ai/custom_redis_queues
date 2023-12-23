@@ -96,10 +96,10 @@ class Queue:
         return self.redis_client.llen(self.name) == 0
 
     @try_except_decorator
-    def complete(self, job_id, result):
+    def complete(self, job_id, result, status="completed"):
         serialized_result = json.dumps(result)
         self.redis_client.hset(self.result_name, job_id, serialized_result)
-        self.redis_client.hset(self.status_name, job_id, "completed")
+        self.redis_client.hset(self.status_name, job_id, status)
 
     @try_except_decorator
     def is_empty(self):
