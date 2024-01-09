@@ -6,7 +6,7 @@ import time
 import dotenv
 import asyncio
 import redis.asyncio as redis
-from typing import Union, Dict
+from typing import Union, Dict, Callable, List
 
 dotenv.load_dotenv()
 
@@ -32,13 +32,14 @@ class Job:
         return await self.queue.redis_client.hget(JOB_STATUS_NAME, self.id)
 
     async def notify(self, payload, status):
-        return await asyncio.gather(
-            self.queue.redis_client.hset(JOB_STATUS_NAME, self.id, json.dumps(status)),
-            self.queue.redis_client.publish(CHANNEL_NAME, json.dumps({
-                "job_id": self.id,
-                "payload": payload
-            })),
-        )
+        pipe = self.queue.redis_client.pipeline()
+        pipe.hset(JOB_STATUS_NAME, self.id, json.dumps(status))
+        pipe.publish(CHANNEL_NAME, json.dumps({
+            "job_id": self.id,
+            "payload": payload
+        }))
+        await pipe.execute()
+
     def __repr__(self) -> str:
         return f"Job(id: {self.id}, queue: {self.queue})"
 
@@ -55,16 +56,19 @@ class MessageBox:
         self.redis_client = redis_client
         self.listeners: Dict[str, asyncio.Future] = {}
         self.loop_task = asyncio.get_event_loop().create_task(self.loop())
+        self.callbacks: List[Callable[[object]]] = []
 
     async def loop(self):
         self.pubsub = self.redis_client.pubsub()
         await self.pubsub.subscribe(CHANNEL_NAME)
-        while True:
+        while asyncio.get_event_loop().is_running():
             try:
                 message = await self.pubsub.get_message(ignore_subscribe_messages=True)
                 if message is None: continue
                 data = message["data"].decode("utf-8")
                 data = json.loads(data)
+                for callback in self.callbacks:
+                    callback(data["job_id"], data["payload"])
                 if data["job_id"] in self.listeners:
                     job_id = data["job_id"]
                     self.listeners[job_id].set_result(data["payload"])
