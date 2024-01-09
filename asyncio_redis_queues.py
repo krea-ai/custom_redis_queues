@@ -112,7 +112,7 @@ class Queue:
     
     async def enqueue(self, job_data, priority: int = 60000):
         """Add a job to the queue, where priority is the number of milliseconds of advantage to give the job"""
-        job_id = str(uuid.uuid4())[:8]
+        job_id = str(uuid.uuid4())
         priority = int(round(time.time() * 1000)) - priority
         print(f"priority = {priority}")
         await self.redis_client.hset("jobs", job_id, json.dumps(job_data))
