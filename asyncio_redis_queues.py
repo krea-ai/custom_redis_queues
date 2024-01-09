@@ -124,9 +124,12 @@ class Queue:
         future = wait_for_job_update(job_id, self.redis_client)
         return future, job_id
 
-    async def dequeue(self):
-        _, job_id, _ = await self.redis_client.bzpopmin(self.name)
-        return Job(job_id.decode(), self)
+    async def dequeue(self, timeout: int = 0):
+        result = await self.redis_client.bzpopmin(self.name, timeout=timeout)
+        if result:
+            _, job_id, _ = result
+            return Job(job_id.decode(), self)
+        return None
 
     async def length(self):
         try:
