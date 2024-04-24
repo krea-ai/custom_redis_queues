@@ -31,10 +31,10 @@ class Job:
     async def get_status(self):
         return await self.queue.redis_client.hget(JOB_STATUS_NAME, self.id)
 
-    async def notify(self, payload, status):
+    async def notify(self, payload, status, channel_name=CHANNEL_NAME):
         return await asyncio.gather(
             self.queue.redis_client.hset(JOB_STATUS_NAME, self.id, json.dumps(status)),
-            self.queue.redis_client.publish(CHANNEL_NAME, json.dumps({
+            self.queue.redis_client.publish(channel_name, json.dumps({
                 "job_id": self.id,
                 "payload": payload
             })),
