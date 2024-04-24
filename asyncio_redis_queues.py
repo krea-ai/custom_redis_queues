@@ -17,9 +17,11 @@ JOB_DATA_NAME = "job_data"
 JOB_STATUS_NAME = "job_status"
 
 class Job:
-    def __init__(self, job_id, queue: 'Queue'):
+    def __init__(self, job_id, queue: 'Queue', channel_name=CHANNEL_NAME):
         self.queue = queue
         self.id = job_id
+        self.channel_name = channel_name
+        self.update_channel_name = f"updates:{self.id}"
     
     async def data(self):
         serialized_job = await self.queue.redis_client.hget("jobs", self.id)
@@ -31,12 +33,14 @@ class Job:
     async def get_status(self):
         return await self.queue.redis_client.hget(JOB_STATUS_NAME, self.id)
 
-    async def notify(self, payload, status, channel_name=CHANNEL_NAME):
+    async def notify(self, payload, status, channel_name=None):
+        channel_name = channel_name or self.channel_name
         return await asyncio.gather(
             self.queue.redis_client.hset(JOB_STATUS_NAME, self.id, json.dumps(status)),
             self.queue.redis_client.publish(channel_name, json.dumps({
                 "job_id": self.id,
-                "payload": payload
+                "payload": payload,
+                "status": status,
             })),
         )
     def __repr__(self) -> str:
