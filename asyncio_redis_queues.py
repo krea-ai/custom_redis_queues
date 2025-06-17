@@ -25,7 +25,7 @@ class Job:
     
     async def data(self):
         serialized_job = await self.queue.redis_client.hget("jobs", self.id)
-        return json.loads(serialized_job)
+        return json.loads(serialized_job) if serialized_job is not None else None
     
     async def set_status(self, status):
         return await self.queue.redis_client.hset(JOB_STATUS_NAME, self.id, json.dumps(status))
